@@ -6,6 +6,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+mod models;
+use models::users::User;
 
 #[tokio::main]
 async fn main() {
@@ -55,12 +57,5 @@ async fn create_user(
 // the input to our `create_user` handler
 #[derive(Deserialize)]
 struct CreateUser {
-    username: String,
-}
-
-// the output to our `create_user` handler
-#[derive(Serialize)]
-struct User {
-    id: u64,
     username: String,
 }
