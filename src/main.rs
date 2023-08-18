@@ -4,10 +4,9 @@ use axum::{
     response::IntoResponse,
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 mod models;
-use models::users::User;
+use models::users::{User, CreateUser};
 
 #[tokio::main]
 async fn main() {
@@ -52,10 +51,4 @@ async fn create_user(
     // this will be converted into a JSON response
     // with a status code of `201 Created`
     (StatusCode::CREATED, Json(user))
-}
-
-// the input to our `create_user` handler
-#[derive(Deserialize)]
-struct CreateUser {
-    username: String,
 }
