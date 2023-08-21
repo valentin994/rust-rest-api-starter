@@ -1,12 +1,27 @@
+use std::any::Any;
+use std::fmt::Error;
 use axum::{
+    async_trait,
     routing::{get, post},
+    http::request::Parts,
     http::StatusCode,
     response::IntoResponse,
-    Json, Router,
+    Json,
+    Router,
+
 };
+use axum::body::Body;
+use axum::extract::{State, Path, Query, FromRequestParts, FromRef};
+use axum::response::Result;
 use std::net::SocketAddr;
+
+use serde_json::{json, Value};
 mod models;
 use models::users::{User, CreateUser};
+
+use bb8::{Pool, PooledConnection};
+use bb8_postgres::PostgresConnectionManager;
+use tokio_postgres::NoTls;
 
 #[tokio::main]
 async fn main() {
@@ -15,12 +30,14 @@ async fn main() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    let manager =
+        PostgresConnectionManager::new_from_stringlike("host=localhost user=postgres password=mysecretpassword", NoTls)
+            .unwrap();
+    let pool = Pool::builder().build(manager).await.unwrap();
     // build our application with a route
     let app = Router::new()
-        // `GET /` goes to `root`
-        .route("/", get(root))
-        // `POST /users` goes to `create_user`
-        .route("/users", post(create_user));
+        .route("/users", post(using_connection_pool_extractor))
+        .with_state(pool);
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
@@ -32,23 +49,69 @@ async fn main() {
         .unwrap();
 }
 
-// basic handler that responds with a static string
+type ConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
+
+async fn using_connection_pool_extractor(
+    State(pool): State<ConnectionPool>,
+) -> Result<String, (StatusCode, String)> {
+    tracing::debug!("tried to connect");
+    let conn = pool.get().await.map_err(internal_error)?;
+    tracing::debug!("connected");
+    let row = conn
+        .query_one("select 1 + 1", &[])
+        .await
+        .map_err(internal_error)?;
+    let two: i32 = row.try_get(0).map_err(internal_error)?;
+
+    Ok(two.to_string())
+}
+
+// we can also write a custom extractor that grabs a connection from the pool
+// which setup is appropriate depends on your application
+struct DatabaseConnection(PooledConnection<'static, PostgresConnectionManager<NoTls>>);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for DatabaseConnection
+where
+    ConnectionPool: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(_parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let pool = ConnectionPool::from_ref(state);
+
+        let conn = pool.get_owned().await.map_err(internal_error)?;
+
+        Ok(Self(conn))
+    }
+}
+
+async fn using_connection_extractor(
+    DatabaseConnection(conn): DatabaseConnection,
+) -> Result<String, (StatusCode, String)> {
+    println!("connected");
+    let row = conn
+        .query_one("select 1 + 1", &[])
+        .await
+        .map_err(internal_error)?;
+    let two: i32 = row.try_get(0).map_err(internal_error)?;
+    Ok(two.to_string())
+}
+
+/// Utility function for mapping any error into a `500 Internal Server Error`
+/// response.
+fn internal_error<E>(err: E) -> (StatusCode, String)
+where
+    E: std::error::Error,
+{
+    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
 async fn root() -> &'static str {
     "Hello, World!"
 }
 
-async fn create_user(
-    // this argument tells axum to parse the request body
-    // as JSON into a `CreateUser` type
-    Json(payload): Json<CreateUser>,
-) -> (StatusCode, Json<User>) {
-    // insert your application logic here
-    let user = User {
-        id: 1337,
-        username: payload.username,
-    };
-
-    // this will be converted into a JSON response
-    // with a status code of `201 Created`
-    (StatusCode::CREATED, Json(user))
+async fn create_user(payload: Json<User>) -> Result<Json<Value>, Error > {
+    Ok(Json(json!(*payload)))
 }
