@@ -1,21 +1,19 @@
-use std::any::Any;
+use axum::extract::{FromRef, FromRequestParts, State};
+use axum::response::{ErrorResponse, Result};
 use axum::{
     async_trait,
-    routing::{get, post},
     http::request::Parts,
     http::StatusCode,
     response::IntoResponse,
-    Json,
-    Router,
-
+    routing::{get, post},
+    Json, Router,
 };
-use axum::extract::{State, FromRequestParts, FromRef};
-use axum::response::{ErrorResponse, Result};
+use std::any::Any;
 use std::net::SocketAddr;
 
-
 mod models;
-use models::users::{User, CreateUser};
+
+use models::users::{CreateUser, User};
 
 use bb8::{Pool, PooledConnection};
 use bb8_postgres::PostgresConnectionManager;
@@ -28,9 +26,11 @@ async fn main() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    let manager =
-        PostgresConnectionManager::new_from_stringlike("host=localhost user=postgres password=mysecretpassword dbname=user_db", NoTls)
-            .unwrap();
+    let manager = PostgresConnectionManager::new_from_stringlike(
+        "host=localhost user=postgres password=mysecretpassword dbname=user_db",
+        NoTls,
+    )
+    .unwrap();
     let pool = Pool::builder().build(manager).await.unwrap();
     // build our application with a route
     let app = Router::new()
@@ -51,7 +51,8 @@ async fn main() {
 type ConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
 
 async fn using_connection_pool_extractor(
-    State(pool): State<ConnectionPool>, Json(payload): Json<CreateUser>
+    State(pool): State<ConnectionPool>,
+    Json(payload): Json<CreateUser>,
 ) -> Result<String, (StatusCode, String)> {
     let conn = pool.get().await.map_err(internal_error)?;
     let row = conn
@@ -109,17 +110,23 @@ async fn root() -> &'static str {
     "Hello, World!"
 }
 
-async fn create_user(State(pool): State<ConnectionPool>, Json(payload): Json<CreateUser>) -> Result<(StatusCode,Json<User>), ErrorResponse> {
+async fn create_user(
+    State(pool): State<ConnectionPool>,
+    Json(payload): Json<CreateUser>,
+) -> Result<(StatusCode, Json<User>), ErrorResponse> {
     let connection = pool.get().await.map_err(internal_error)?;
     tracing::info!("{:?}", &payload.username);
     let row = connection
-        .query("INSERT INTO userTable(username) VALUES($1::TEXT) RETURNING id;", &[&payload.username])
+        .query(
+            "INSERT INTO userTable(username) VALUES($1::TEXT) RETURNING id;",
+            &[&payload.username],
+        )
         .await
         .map_err(internal_error)?;
-    let id:i32 = row[0].get("id");
-    let user = User{
+    let id: i32 = row[0].get("id");
+    let user = User {
         id,
-        username: payload.username
+        username: payload.username,
     };
-    Ok((StatusCode::CREATED ,Json(user)))
+    Ok((StatusCode::CREATED, Json(user)))
 }
