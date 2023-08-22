@@ -12,10 +12,12 @@ use axum::{
 };
 use axum::body::Body;
 use axum::extract::{State, Path, Query, FromRequestParts, FromRef};
-use axum::response::Result;
+use axum::response::{ErrorResponse, Result};
 use std::net::SocketAddr;
 
 use serde_json::{json, Value};
+use tracing::debug;
+
 mod models;
 use models::users::{User, CreateUser};
 
@@ -31,7 +33,7 @@ async fn main() {
         .init();
 
     let manager =
-        PostgresConnectionManager::new_from_stringlike("host=localhost user=postgres password=mysecretpassword", NoTls)
+        PostgresConnectionManager::new_from_stringlike("host=localhost user=postgres password=mysecretpassword dbname=user_db", NoTls)
             .unwrap();
     let pool = Pool::builder().build(manager).await.unwrap();
     // build our application with a route
@@ -110,10 +112,17 @@ async fn root() -> &'static str {
     "Hello, World!"
 }
 
-async fn create_user(State(pool): State<ConnectionPool>, Json(payload): Json<CreateUser>) -> (StatusCode, Json<User>) {
+async fn create_user(State(pool): State<ConnectionPool>, Json(payload): Json<CreateUser>) -> Result<(StatusCode,Json<User>), ErrorResponse> {
+    let connection = pool.get().await.map_err(internal_error)?;
+    tracing::info!("{:?}", &payload.username);
+    let row = connection
+        .query("INSERT INTO userTable(username) VALUES($1::TEXT) RETURNING id;", &[&payload.username])
+        .await
+        .map_err(internal_error)?;
+    let id:i32 = row[0].get("id");
     let user = User{
-        id: 1,
+        id,
         username: payload.username
     };
-    (StatusCode::CREATED, Json(user))
+    Ok((StatusCode::CREATED ,Json(user)))
 }
