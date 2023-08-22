@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::fmt::Error;
 use axum::{
     async_trait,
     routing::{get, post},
@@ -10,13 +9,10 @@ use axum::{
     Router,
 
 };
-use axum::body::Body;
-use axum::extract::{State, Path, Query, FromRequestParts, FromRef};
+use axum::extract::{State, FromRequestParts, FromRef};
 use axum::response::{ErrorResponse, Result};
 use std::net::SocketAddr;
 
-use serde_json::{json, Value};
-use tracing::debug;
 
 mod models;
 use models::users::{User, CreateUser};
@@ -39,6 +35,7 @@ async fn main() {
     // build our application with a route
     let app = Router::new()
         .route("/users", post(create_user))
+        .route("/", get(root))
         .with_state(pool);
 
     // run our app with hyper
