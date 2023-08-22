@@ -4,11 +4,9 @@ use axum::{
     async_trait,
     http::request::Parts,
     http::StatusCode,
-    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use std::any::Any;
 use std::net::SocketAddr;
 
 mod models;
@@ -32,14 +30,11 @@ async fn main() {
     )
     .unwrap();
     let pool = Pool::builder().build(manager).await.unwrap();
-    // build our application with a route
     let app = Router::new()
-        .route("/users", post(create_user))
         .route("/", get(root))
+        .route("/users", post(create_user))
         .with_state(pool);
 
-    // run our app with hyper
-    // `axum::Server` is a re-export of `hyper::Server`
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
@@ -50,22 +45,6 @@ async fn main() {
 
 type ConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
 
-async fn using_connection_pool_extractor(
-    State(pool): State<ConnectionPool>,
-    Json(payload): Json<CreateUser>,
-) -> Result<String, (StatusCode, String)> {
-    let conn = pool.get().await.map_err(internal_error)?;
-    let row = conn
-        .query_one("select 1 + 1", &[])
-        .await
-        .map_err(internal_error)?;
-    let two: i32 = row.try_get(0).map_err(internal_error)?;
-
-    Ok(two.to_string())
-}
-
-// we can also write a custom extractor that grabs a connection from the pool
-// which setup is appropriate depends on your application
 struct DatabaseConnection(PooledConnection<'static, PostgresConnectionManager<NoTls>>);
 
 #[async_trait]
@@ -85,20 +64,6 @@ where
     }
 }
 
-async fn using_connection_extractor(
-    DatabaseConnection(conn): DatabaseConnection,
-) -> Result<String, (StatusCode, String)> {
-    println!("connected");
-    let row = conn
-        .query_one("select 1 + 1", &[])
-        .await
-        .map_err(internal_error)?;
-    let two: i32 = row.try_get(0).map_err(internal_error)?;
-    Ok(two.to_string())
-}
-
-/// Utility function for mapping any error into a `500 Internal Server Error`
-/// response.
 fn internal_error<E>(err: E) -> (StatusCode, String)
 where
     E: std::error::Error,
