@@ -4,5 +4,6 @@ CREATE DATABASE user_db;
 
 CREATE TABLE UserTable(
     id SERIAL PRIMARY KEY,
-    username varchar(20) NOT NULL
+    username varchar(20) NOT NULL,
+    UNIQUE(username)
 );
