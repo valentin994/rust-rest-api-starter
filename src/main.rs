@@ -36,7 +36,7 @@ async fn main() {
     let pool = Pool::builder().build(manager).await.unwrap();
     // build our application with a route
     let app = Router::new()
-        .route("/users", post(using_connection_pool_extractor))
+        .route("/users", post(create_user))
         .with_state(pool);
 
     // run our app with hyper
@@ -52,11 +52,9 @@ async fn main() {
 type ConnectionPool = Pool<PostgresConnectionManager<NoTls>>;
 
 async fn using_connection_pool_extractor(
-    State(pool): State<ConnectionPool>,
+    State(pool): State<ConnectionPool>, Json(payload): Json<CreateUser>
 ) -> Result<String, (StatusCode, String)> {
-    tracing::debug!("tried to connect");
     let conn = pool.get().await.map_err(internal_error)?;
-    tracing::debug!("connected");
     let row = conn
         .query_one("select 1 + 1", &[])
         .await
@@ -112,6 +110,10 @@ async fn root() -> &'static str {
     "Hello, World!"
 }
 
-async fn create_user(payload: Json<User>) -> Result<Json<Value>, Error > {
-    Ok(Json(json!(*payload)))
+async fn create_user(State(pool): State<ConnectionPool>, Json(payload): Json<CreateUser>) -> (StatusCode, Json<User>) {
+    let user = User{
+        id: 1,
+        username: payload.username
+    };
+    (StatusCode::CREATED, Json(user))
 }
