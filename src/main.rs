@@ -1,4 +1,4 @@
-use axum::extract::{FromRef, FromRequestParts, Query, State};
+use axum::extract::{FromRef, FromRequestParts, RawQuery, State};
 use axum::response::{ErrorResponse, Result};
 use axum::{
     async_trait,
@@ -100,7 +100,6 @@ async fn create_user(
 #[derive(Debug, Deserialize)]
 struct Params {
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    id: Option<i32>,
     username: Option<String>,
 }
 
@@ -119,12 +118,12 @@ where
 
 async fn get_user(
     State(pool): State<ConnectionPool>,
-    id: Query<Params>,
+    id: RawQuery,
 ) -> Result<(StatusCode, Json<User>), ErrorResponse> {
     let user = User {
         id: 2,
         username: format!("hello"),
     };
-    tracing::info!("{:?}", id);
+    tracing::info!("{:?}", id.0.unwrap());
     Ok((StatusCode::OK, Json(user)))
 }
