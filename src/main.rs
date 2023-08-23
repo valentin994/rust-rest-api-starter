@@ -1,4 +1,4 @@
-use axum::extract::{FromRef, FromRequestParts, State};
+use axum::extract::{FromRef, FromRequestParts, Query, State};
 use axum::response::{ErrorResponse, Result};
 use axum::{
     async_trait,
@@ -7,8 +7,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use serde::{de, Deserialize, Deserializer};
 use std::net::SocketAddr;
-
+use std::{fmt, str::FromStr};
 mod models;
 
 use models::users::{CreateUser, User};
@@ -33,6 +34,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(root))
         .route("/users", post(create_user))
+        .route("/user", get(get_user))
         .with_state(pool);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -94,4 +96,35 @@ async fn create_user(
         username: payload.username,
     };
     Ok((StatusCode::CREATED, Json(user)))
+}
+#[derive(Debug, Deserialize)]
+struct Params {
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    id: Option<i32>,
+    username: Option<String>,
+}
+
+fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    let opt = Option::<String>::deserialize(de)?;
+    match opt.as_deref() {
+        None | Some("") => Ok(None),
+        Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
+    }
+}
+
+async fn get_user(
+    State(pool): State<ConnectionPool>,
+    id: Query<Params>,
+) -> Result<(StatusCode, Json<User>), ErrorResponse> {
+    let user = User {
+        id: 2,
+        username: format!("hello"),
+    };
+    tracing::info!("{:?}", id);
+    Ok((StatusCode::OK, Json(user)))
 }
