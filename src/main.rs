@@ -33,7 +33,7 @@ async fn main() {
     let pool = Pool::builder().build(manager).await.unwrap();
     let app = Router::new()
         .route("/", get(root))
-        .route("/users", post(create_user))
+        .route("/user", post(create_user))
         .route("/user", get(get_user))
         .with_state(pool);
 

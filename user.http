@@ -1,0 +1,13 @@
+### Create user John Doe
+POST http://localhost:3000/user
+Content-Type: application/json
+
+{"username":  "John Doe"}
+
+### Hello World
+GET http://localhost:3000/
+Accept: application/json
+
+### Get one uesr
+GET http://localhost:3000/user?id=2
+Accept: application/json
