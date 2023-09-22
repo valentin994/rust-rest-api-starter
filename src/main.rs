@@ -1,21 +1,19 @@
-use axum::extract::{FromRef, FromRequestParts, Query, RawQuery, State};
+use axum::extract::{ Query, State};
 use axum::response::{ErrorResponse, Result};
 use axum::{
     http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
-use serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::{ str::FromStr};
 
 mod models;
 
 use models::users::{CreateUser, User};
 
 use sqlx::postgres::{PgPool};
-use sqlx::{Connection, Pool, Postgres, Row};
+use sqlx::{ Pool, Postgres, Row};
 
 #[tokio::main]
 async fn main() {
@@ -53,7 +51,7 @@ async fn create_user(
         .bind(&payload.username)
         .fetch_one(&pool)
         .await
-        .unwrap();
+        .map_err(internal_error)?;
     let id: i32 = res.get("id");
     let user = User {
         id,
@@ -62,13 +60,20 @@ async fn create_user(
     Ok((StatusCode::CREATED, Json(user)))
 }
 
+fn internal_error<E>(err: E) -> (StatusCode, String)
+    where
+        E: std::error::Error,
+{
+    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+}
+
 async fn get_user(
     State(pool): State<Pool<Postgres>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<(StatusCode, Json<User>), ErrorResponse> {
-    let q = "SELECT id, username FROM userTable WHERE username=valentin.vareskic";
     let username = params.get("username").unwrap();
-    let query = sqlx::query_as::<_, User>(q);
-    let user = query.fetch_one(&pool).await.unwrap();
+    let q = format!("SELECT id, username FROM usertable WHERE username='{}'", &username);
+    let query = sqlx::query_as::<_, User>(&q).bind(&username);
+    let user = query.fetch_one(&pool).await.map_err(internal_error)?;
     Ok((StatusCode::OK, Json(user)))
 }
