@@ -5,6 +5,7 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
+use sqlx::Error::RowNotFound;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -75,11 +76,18 @@ async fn update_user(
     Ok((StatusCode::CREATED, Json(user)))
 }
 
-fn internal_error<E>(err: E) -> (StatusCode, String)
-where
-    E: std::error::Error,
-{
-    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+fn internal_error(err: sqlx::Error) -> (StatusCode, String) {
+    tracing::info!(
+        "Server encontered an error while communicating with the database {:?}",
+        err.to_string()
+    );
+    match err {
+        RowNotFound => (StatusCode::NOT_FOUND, String::from("Can't find user")),
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("fucking hell"),
+        ),
+    }
 }
 
 async fn get_user(
